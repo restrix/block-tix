@@ -1,125 +1,233 @@
+// // src/components/events/featured-event.tsx
+// import React, { useEffect, useState } from "react";
+// import { motion } from "framer-motion";
+// import { Badge } from "@/components/ui/badge";
+// import { Card, CardContent } from "@/components/ui/card";
+// import { Link } from "react-router-dom";
+// import { supabase } from "@/integrations/supabase/client";
+// import { AnimatedButton } from "@/components/ui/animated-button";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Event } from "@/lib/mock-data";
-import { formatDate, formatPrice } from "@/lib/utils";
-import { Calendar, MapPin, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+// interface Movie {
+//   id: string;
+//   title: string;
+//   description?: string;
+//   poster_url?: string;
+//   genre?: string;
+//   duration?: number;
+//   price?: number; // INR
+//   price_sol?: number; // SOL
+//   total_tickets?: number;
+//   available_tickets?: number;
+// }
+
+// export function FeaturedEvent() {
+//   const featuredMovieId = "1f408ee8-937e-4842-8a8d-0ee7f89c44cd"; // fixed featured ID
+//   const [movie, setMovie] = useState<Movie | null>(null);
+
+//   useEffect(() => {
+//     const fetchMovie = async () => {
+//       const { data, error } = await supabase
+//         .from("movies")
+//         .select("*")
+//         .eq("id", featuredMovieId)
+//         .single();
+
+//       if (error) {
+//         console.error("Failed to fetch featured movie:", error);
+//         setMovie(null);
+//       } else {
+//         setMovie(data);
+//       }
+//     };
+
+//     fetchMovie();
+//   }, []);
+
+//   if (!movie) {
+//     return <div className="p-4 text-white">No featured movie available.</div>;
+//   }
+
+//   // Ticket info from database
+//   const price = movie.price || 0; // INR
+//   const availableTickets = movie.available_tickets || 0;
+//   const totalTickets = movie.total_tickets || 100;
+//   const percentageSold = Math.round(
+//     ((totalTickets - availableTickets) / totalTickets) * 100
+//   );
+//   const isSoldOut = availableTickets === 0;
+
+//   return (
+//     <motion.div
+//       whileHover={{ scale: 1.02, rotate: 1 }}
+//       className="rounded-2xl overflow-hidden p-[2px] bg-gradient-to-r from-emerald-400 via-purple-500 to-indigo-500 animate-border"
+//     >
+//       <Card className="overflow-hidden border-0 bg-gradient-to-br from-emerald-900/20 to-purple-900/20 backdrop-blur-md">
+//         <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+//           <div className="relative aspect-video md:aspect-auto overflow-hidden">
+//             <img
+//               src={movie.poster_url || "/images/sample-ticket.png"}
+//               alt={movie.title}
+//               className="object-cover w-full h-full transform hover:scale-105 transition-transform duration-500"
+//             />
+//             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-end p-6 md:hidden">
+//               <Badge className="self-start mb-2 bg-emerald-500/80 backdrop-blur-sm">Featured</Badge>
+//               <h2 className="text-2xl font-bold text-white mb-2">{movie.title}</h2>
+//               <p className="text-white/90">{movie.duration ? `${movie.duration} min` : ""}</p>
+//             </div>
+//           </div>
+
+//           <CardContent className="p-6 flex flex-col justify-between bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-md">
+//             <div className="space-y-4">
+//               <Badge className="mb-2 bg-emerald-500/80 backdrop-blur-sm text-white">Featured</Badge>
+//               <h2 className="text-3xl font-bold mb-2 text-white">{movie.title}</h2>
+//               <p className="text-gray-300">{movie.description}</p>
+//             </div>
+
+//             <div className="mt-6 space-y-4">
+//               <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+//                 <motion.div
+//                   className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-2"
+//                   initial={{ width: 0 }}
+//                   animate={{ width: `${percentageSold}%` }}
+//                   transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
+//                 />
+//               </div>
+//               <div className="flex items-center justify-between text-white">
+//                 <p className="font-medium text-lg">₹{price}</p>
+//                 <p className="text-sm text-emerald-400">{percentageSold}% sold</p>
+//               </div>
+//               <AnimatedButton
+//                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
+//                 asChild
+//               >
+//                 <Link to={`/movies/${movie.id}`}>
+//                   {isSoldOut ? "Join Waitlist" : "Get Tickets"}
+//                 </Link>
+//               </AnimatedButton>
+//             </div>
+//           </CardContent>
+//         </div>
+//       </Card>
+//     </motion.div>
+//   );
+// }
+// src/components/events/featured-event.tsx
+// src/components/events/featured-event.tsx
+"use client";
+
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { AnimatedButton } from "@/components/ui/animated-button";
 
-interface FeaturedEventProps {
-  event: Event;
+interface Movie {
+  id: string;
+  title: string;
+  description?: string;
+  poster_url?: string;
+  genre?: string;
+  duration?: number;
+  price?: number; // INR
+  price_sol?: number; // SOL
+  total_tickets?: number;
+  available_tickets?: number;
+  event_date: string; // ISO string
+  event_time: string; // HH:MM:SS
+  venue?: string;
 }
 
-export function FeaturedEvent({ event }: FeaturedEventProps) {
-  const isSoldOut = event.availableTickets === 0;
-  const percentageSold = Math.round(((event.totalTickets - event.availableTickets) / event.totalTickets) * 100);
-  
+export function FeaturedEvent() {
+  const [movie, setMovie] = useState<Movie | null>(null);
+
+  useEffect(() => {
+    const fetchLatestEvent = async () => {
+      const { data, error } = await supabase
+        .from("movies")
+        .select("*")
+        .order("event_date", { ascending: false }) // latest event first
+        .limit(1)
+        .single();
+
+      if (error) {
+        console.error("Failed to fetch featured movie:", error);
+        setMovie(null);
+      } else {
+        setMovie(data);
+      }
+    };
+
+    fetchLatestEvent();
+  }, []);
+
+  if (!movie) {
+    return <div className="p-4 text-white">No featured event available.</div>;
+  }
+
+  // Ticket info
+  const price = movie.price || 0;
+  const availableTickets = movie.available_tickets || 0;
+  const totalTickets = movie.total_tickets || 100;
+  const percentageSold = Math.round(((totalTickets - availableTickets) / totalTickets) * 100);
+  const isSoldOut = availableTickets === 0;
+
   return (
     <motion.div
       whileHover={{ scale: 1.02, rotate: 1 }}
-      className="rounded-2xl overflow-hidden p-[2px] bg-[length:400%] bg-gradient-to-r from-emerald-400 via-purple-500 to-indigo-500 animate-border"
-      style={{
-        backgroundSize: "200% 200%",
-        animation: "borderGradient 4s linear infinite"
-      }}
+      className="rounded-2xl overflow-hidden p-[2px] bg-gradient-to-r from-emerald-400 via-purple-500 to-indigo-500 animate-border"
     >
       <Card className="overflow-hidden border-0 bg-gradient-to-br from-emerald-900/20 to-purple-900/20 backdrop-blur-md">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
           <div className="relative aspect-video md:aspect-auto overflow-hidden">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              transition={{ duration: 0.4 }}
-              className="w-full h-full"
-            >
-              <img 
-                src={event.image || "/images/sample-ticket.png"} 
-                alt={event.title} 
-                className="object-cover w-full h-full transform hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-end p-6 md:hidden">
-                <Badge className="self-start mb-2 bg-emerald-500/80 backdrop-blur-sm">Featured Event</Badge>
-                <h2 className="text-2xl font-bold text-white mb-2">{event.title}</h2>
-                <div className="flex items-center text-white/90 space-x-2">
-                  <Calendar className="h-4 w-4" />
-                  <span className="text-sm">{formatDate(event.date)}</span>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        <CardContent className="p-6 flex flex-col justify-between bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-md">
-          <div className="space-y-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="hidden md:block"
-            >
-              <Badge className="mb-2 bg-emerald-500/80 backdrop-blur-sm text-white">Featured Event</Badge>
-              <h2 className="text-3xl font-bold mb-2 text-white">{event.title}</h2>
-            </motion.div>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-gray-300"
-            >
-              {event.description}
-            </motion.p>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="grid grid-cols-2 gap-4"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2 text-gray-300">
-                  <Calendar className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm">{formatDate(event.date)}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-gray-300">
-                  <MapPin className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm">{event.location}</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2 text-gray-300">
-                  <Users className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm">{event.availableTickets} tickets left</span>
-                </div>
-                <p className="text-sm text-gray-300">Organized by {event.organizer}</p>
-              </div>
-            </motion.div>
-          </div>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="mt-6 space-y-4"
-          >
-            <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-              <motion.div 
-                className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-2"
-                initial={{ width: 0 }}
-                animate={{ width: `${percentageSold}%` }}
-                transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
-              />
+            <img
+              src={movie.poster_url || "/images/sample-ticket.png"}
+              alt={movie.title}
+              className="object-cover w-full h-full transform hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-end p-6 md:hidden">
+              <Badge className="self-start mb-2 bg-emerald-500/80 backdrop-blur-sm">Featured</Badge>
+              <h2 className="text-2xl font-bold text-white mb-2">{movie.title}</h2>
+              <p className="text-white/90">{movie.duration ? `${movie.duration} min` : ""}</p>
             </div>
-            <div className="flex items-center justify-between text-white">
-              <p className="font-medium text-lg">{formatPrice(event.price, event.currency)}</p>
-              <p className="text-sm text-emerald-400">{percentageSold}% sold</p>
+          </div>
+
+          <CardContent className="p-6 flex flex-col justify-between bg-gradient-to-br from-black/60 to-black/40 backdrop-blur-md">
+            <div className="space-y-4">
+              <Badge className="mb-2 bg-emerald-500/80 backdrop-blur-sm text-white">Featured</Badge>
+              <h2 className="text-3xl font-bold mb-2 text-white">{movie.title}</h2>
+              <p className="text-gray-300">{movie.description}</p>
+              <p className="text-gray-400 text-sm">
+                {movie.event_date} at {movie.event_time} | Venue: {movie.venue || "TBD"}
+              </p>
             </div>
-            <AnimatedButton className="w-full bg-emerald-500 hover:bg-emerald-600 text-white" asChild>
-              <Link to={`/events/${event.id}`}>
-                {isSoldOut ? "Join Waitlist" : "Get Tickets"}
-              </Link>
-            </AnimatedButton>
-          </motion.div>
-        </CardContent>
-      </div>
-    </Card>
-  </motion.div>
+
+            <div className="mt-6 space-y-4">
+              <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                <motion.div
+                  className="bg-gradient-to-r from-emerald-400 to-emerald-500 h-2"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${percentageSold}%` }}
+                  transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-white">
+                <p className="font-medium text-lg">₹{price}</p>
+                <p className="text-sm text-emerald-400">{percentageSold}% sold</p>
+              </div>
+              <AnimatedButton
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
+                asChild
+              >
+                <Link to={`/movies/${movie.id}`}>
+                  {isSoldOut ? "Join Waitlist" : "Get Tickets"}
+                </Link>
+              </AnimatedButton>
+            </div>
+          </CardContent>
+        </div>
+      </Card>
+    </motion.div>
   );
 }

@@ -47,16 +47,14 @@ export function logTransaction(
 }
 
 // Format price to display as currency
-export function formatPrice(price: number, currency: string = "USD"): string {
-  if (currency === "USD") {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(price);
-  }
-  return `${price.toFixed(2)} ${currency}`;
+export function formatPrice(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
+
 
 export async function connectWallet() {
   // Connect to Solana devnet

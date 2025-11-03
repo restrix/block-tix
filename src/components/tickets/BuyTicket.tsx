@@ -1,116 +1,119 @@
-import React, { useState } from "react";
+"use client";
+
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Loader2, Ticket as TicketIcon } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Ticket } from "lucide-react";
-import { generateTicketNFTMetadata } from "@/types/nft-metadata";
-import { useSolanaTicket } from "@/hooks/useSolanaTicket";
-import { useWallet } from "@/contexts/WalletContext";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Card, CardContent } from "@/components/ui/card";
-import { formatDate } from "@/lib/utils";
-import { Keypair } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Metaplex, walletAdapterIdentity } from "@metaplex-foundation/js";
+import axios from "axios";
+
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  image: string;
+  category: string;
+  availableTickets: number;
+  price: number;
+  currency: string;
+  resaleEnabled: boolean;
+  resalePriceCap: number;
+  location: string;
+  organizer: string;
+}
 
 interface BuyTicketProps {
-  eventId: string;
-  eventName: string;
-  eventDate: string;
-  venueName: string;
-  ticketPrice: number;
-  currency?: string;
+  event: Event;
   disabled?: boolean;
 }
 
-export function BuyTicket({
-  eventId,
-  eventName,
-  eventDate,
-  venueName,
-  ticketPrice,
-  currency = "SOL",
-  disabled = false
-}: BuyTicketProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [purchaseComplete, setPurchaseComplete] = useState(false);
-  const { toast } = useToast();
-  const { mintTicket, isReady } = useSolanaTicket();
-  const { walletAddress, addNFT, balance } = useWallet();
+const PINATA_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
 
-  const getSolanaEventId = (id: string) => {
-    const eventSeed = new TextEncoder().encode(id);
-    const eventKeypair = Keypair.fromSeed(
-      Uint8Array.from(eventSeed.slice(0, 32))
-    );
-    return eventKeypair.publicKey.toString();
-  };
+// Upload metadata to Pinata
+async function uploadMetadataToPinata(metadata: any, jwt: string) {
+  const res = await axios.post(PINATA_JSON_URL, metadata, {
+    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+  });
+  return `https://gateway.pinata.cloud/ipfs/${res.data.IpfsHash}`;
+}
+
+export function BuyTicket({ event, disabled = false }: BuyTicketProps) {
+  const { toast } = useToast();
+  const { publicKey, connected, signTransaction } = useWallet();
+  const [balance, setBalance] = useState(0);
+  const [purchaseComplete, setPurchaseComplete] = useState(false);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+
+  // Fetch wallet balance
+  useEffect(() => {
+    if (!publicKey) return setBalance(0);
+    connection.getBalance(publicKey).then((lamports) => setBalance(lamports / LAMPORTS_PER_SOL));
+  }, [publicKey]);
 
   const handleBuyTicket = async () => {
-    if (!walletAddress || !isReady) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet first",
-        variant: "destructive"
-      });
-      return;
-    }
+    console.log("Buying ticket", event);
 
-    if (balance < ticketPrice) {
-      toast({
-        title: "Insufficient funds",
-        description: `You need at least ${ticketPrice} ${currency} to purchase this ticket`,
-        variant: "destructive"
-      });
-      return;
-    }
+    if (!event) return toast({ title: "Error", description: "Event missing", variant: "destructive" });
+    if (!connected || !publicKey || !signTransaction)
+      return toast({ title: "Wallet not connected", description: "Connect your wallet first", variant: "destructive" });
+
+    if (balance < event.price)
+      return toast({ title: "Insufficient funds", description: `Need at least ${event.price} SOL`, variant: "destructive" });
 
     setIsLoading(true);
+
     try {
-      const section = String.fromCharCode(65 + Math.floor(Math.random() * 5));
-      const row = String(Math.floor(Math.random() * 10) + 1);
-      const seat = String(Math.floor(Math.random() * 30) + 1);
-      
-      const ticketId = `tkt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      const metadata = generateTicketNFTMetadata(
-        eventName,
-        eventDate,
-        venueName,
-        section,
-        row,
-        seat,
-        eventId,
-        ticketId,
-        walletAddress,
-        `https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop`,
-        ticketPrice * 1000000000
-      );
+      // 1️⃣ Create ticket metadata
+      const ticketId = `tkt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const metadata = {
+        name: `Ticket for ${event.title}`,
+        description: event.description,
+        image: event.image,
+        attributes: [
+          { trait_type: "Event", value: event.title },
+          { trait_type: "Date", value: event.date },
+          { trait_type: "Venue", value: event.location },
+          { trait_type: "Owner", value: publicKey.toBase58() },
+          { trait_type: "Ticket ID", value: ticketId },
+        ],
+        properties: { category: "ticket" },
+      };
 
-      const solanaEventId = getSolanaEventId(eventId);
-      const result = await mintTicket(
-        solanaEventId,
-        `${section}${row}${seat}`,
-        metadata
-      );
+      // 2️⃣ Upload to Pinata
+      const pinataJwt = import.meta.env.VITE_PINATA_JWT;
+      if (!pinataJwt) throw new Error("Missing Pinata JWT");
+      const metadataUri = await uploadMetadataToPinata(metadata, pinataJwt);
 
-      if (result) {
-        addNFT({
-          id: ticketId,
-          name: metadata.name,
-          image: metadata.image,
-          event: eventName,
-          date: eventDate,
-          seat: `${section}${row}${seat}`
-        });
-
-        setPurchaseComplete(true);
-      }
-    } catch (error) {
-      console.error("Error minting ticket:", error);
-      toast({
-        title: "Error",
-        description: "Failed to mint ticket",
-        variant: "destructive"
+      // 3️⃣ Mint NFT via Metaplex
+      const metaplex = Metaplex.make(connection).use(walletAdapterIdentity({ publicKey, signTransaction }));
+      const { nft } = await metaplex.nfts().create({
+        uri: metadataUri,
+        name: `Ticket: ${event.title}`,
+        sellerFeeBasisPoints: 0,
+        symbol: "BLOCKTIX",
       });
+
+      console.log("✅ NFT minted:", nft.address.toBase58());
+      toast({ title: "Success", description: "Ticket purchased and minted!" });
+      setPurchaseComplete(true);
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Error", description: err.message || "Failed to purchase ticket", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -118,45 +121,29 @@ export function BuyTicket({
 
   const handleClose = () => {
     setOpenDialog(false);
-    if (purchaseComplete) {
-      setPurchaseComplete(false);
-      window.location.href = "/dashboard";
-    }
+    if (purchaseComplete) window.location.href = "/dashboard";
   };
+
+  const hasEnoughBalance = balance >= event.price;
 
   return (
     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+      {/* Trigger button */}
       <DialogTrigger asChild>
-        <Button 
-          disabled={disabled || !walletAddress || !isReady}
-          className="flex items-center space-x-2"
-        >
-          <Ticket className="h-4 w-4" />
+        <Button disabled={disabled || !connected || !hasEnoughBalance} className="flex items-center space-x-2">
+          <TicketIcon className="h-4 w-4" />
           <span>Buy Ticket</span>
         </Button>
       </DialogTrigger>
+
+      {/* Dialog content */}
       <DialogContent className="sm:max-w-md">
         {purchaseComplete ? (
           <>
             <DialogHeader>
               <DialogTitle>Purchase Complete!</DialogTitle>
-              <DialogDescription>
-                Your ticket has been minted as an NFT and added to your wallet.
-              </DialogDescription>
+              <DialogDescription>Your ticket has been minted to your wallet.</DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-                <CardContent className="p-4 text-center">
-                  <Ticket className="h-16 w-16 mx-auto my-4 text-emerald-500" />
-                  <h3 className="text-lg font-semibold">{eventName}</h3>
-                  <p className="text-sm text-muted-foreground">{formatDate(eventDate)}</p>
-                  <p className="text-sm mt-2">{venueName}</p>
-                </CardContent>
-              </Card>
-              <p className="text-sm mt-4 text-center text-muted-foreground">
-                You can view your tickets in the "My Tickets" section of your dashboard.
-              </p>
-            </div>
             <DialogFooter>
               <Button onClick={handleClose}>View My Tickets</Button>
             </DialogFooter>
@@ -166,48 +153,12 @@ export function BuyTicket({
             <DialogHeader>
               <DialogTitle>Confirm Purchase</DialogTitle>
               <DialogDescription>
-                You are about to purchase a ticket for {eventName}.
+                You are about to purchase a ticket for <strong>{event.title}</strong> at {event.price} SOL.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="font-medium">Event:</span>
-                  <span>{eventName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Date:</span>
-                  <span>{formatDate(eventDate)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Venue:</span>
-                  <span>{venueName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Price:</span>
-                  <span>{ticketPrice} {currency}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Your Balance:</span>
-                  <span className={balance < ticketPrice ? "text-destructive" : ""}>
-                    {balance.toFixed(2)} {currency}
-                  </span>
-                </div>
-              </div>
-            </div>
             <DialogFooter>
-              <Button 
-                onClick={handleBuyTicket}
-                disabled={isLoading || balance < ticketPrice}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Confirm Purchase"
-                )}
+              <Button onClick={handleBuyTicket} disabled={isLoading || !hasEnoughBalance}>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Confirm Purchase"}
               </Button>
             </DialogFooter>
           </>

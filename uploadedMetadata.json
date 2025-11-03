@@ -1,0 +1,28 @@
+{
+  "metadataCID": "QmerxrzceeC2pQSiiHGN6e75aXXdz7ybzwcQSPJxytan7y",
+  "metadata": {
+    "name": "Block-Tix VIP Ticket",
+    "description": "An exclusive NFT ticket for Block-Tix Live Event 2025",
+    "attributes": [
+      {
+        "trait_type": "Event",
+        "value": "Block-Tix Launch Party"
+      },
+      {
+        "trait_type": "Seat",
+        "value": "Front Row"
+      },
+      {
+        "trait_type": "Date",
+        "value": "2025-12-12"
+      },
+      {
+        "trait_type": "Location",
+        "value": "Virtual"
+      }
+    ],
+    "properties": {
+      "category": "ticket"
+    }
+  }
+}

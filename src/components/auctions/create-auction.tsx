@@ -1,15 +1,15 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useWallet } from "@/contexts/WalletContext";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Gavel, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { format, addHours } from "date-fns";
+import { useWalletNFTs } from "@/hooks/usewalletNFTs";
 
 export function CreateAuction() {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,14 +18,18 @@ export function CreateAuction() {
   const [startingPrice, setStartingPrice] = useState<number>(0.1);
   const [duration, setDuration] = useState<number>(24); // hours
   const { toast } = useToast();
-  const { nfts, walletAddress } = useWallet();
+  const { connected, publicKey } = useWallet();
+  const { nfts, loading } = useWalletNFTs();
+
+  const hasTickets = nfts && nfts.length > 0;
+  const endDate = addHours(new Date(), duration);
 
   const handleCreateAuction = async () => {
-    if (!walletAddress) {
+    if (!connected || !publicKey) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet first",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -41,8 +45,7 @@ export function CreateAuction() {
 
     setIsLoading(true);
     try {
-      // In a real implementation, we would call the Solana program to create an auction
-      // For demo purposes, we'll simulate a successful auction creation
+      // 🔹 Simulate blockchain call
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       toast({
@@ -63,21 +66,19 @@ export function CreateAuction() {
     }
   };
 
-  const hasTickets = nfts.length > 0;
-  const endDate = addHours(new Date(), duration);
-
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
           variant="default"
           className="flex items-center space-x-2"
-          disabled={!walletAddress || !hasTickets}
+          disabled={!connected || !hasTickets || loading}
         >
           <Gavel className="h-4 w-4" />
-          <span>Create Auction</span>
+          <span>{loading ? "Fetching NFTs..." : "Create Auction"}</span>
         </Button>
       </DialogTrigger>
+
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create New Auction</DialogTitle>
@@ -85,20 +86,18 @@ export function CreateAuction() {
             List one of your ticket NFTs for auction.
           </DialogDescription>
         </DialogHeader>
+
         <div className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="ticket">Select Ticket</Label>
-            <Select
-              value={selectedTicket}
-              onValueChange={setSelectedTicket}
-            >
+            <Select value={selectedTicket} onValueChange={setSelectedTicket}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a ticket" />
+                <SelectValue placeholder={loading ? "Loading NFTs..." : "Select a ticket"} />
               </SelectTrigger>
               <SelectContent>
-                {nfts.map((nft) => (
-                  <SelectItem key={nft.id} value={nft.id}>
-                    {nft.name}
+                {nfts.map((nft, index) => (
+                  <SelectItem key={index} value={nft.mintAddress.toBase58()}>
+                    {nft.name || "Unnamed NFT"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -153,6 +152,7 @@ export function CreateAuction() {
             </div>
           </div>
         </div>
+
         <DialogFooter>
           <Button
             onClick={handleCreateAuction}

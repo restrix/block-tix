@@ -1,96 +1,50 @@
-import { useEffect, useState } from 'react';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { SolanaTicketService } from '@/services/solanaTicketService';
-import { useWallet } from '@/contexts/WalletContext';
-import { useToast } from '@/hooks/use-toast';
-import { TicketNFTMetadata } from '@/types/nft-metadata';
-import { logTransaction } from '@/lib/utils';
+import { useState } from "react";
+import { useWallet } from "@/contexts/WalletContext";
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { logTransaction } from "@/lib/utils";
+import { TicketNFTMetadata } from "@/types/nft-metadata";
 
 export function useSolanaTicket() {
-  const { toast } = useToast();
-  const { walletAddress, addNFT } = useWallet();
-  const [ticketService, setTicketService] = useState<SolanaTicketService | null>(null);
+  const { wallet, publicKey, connected, refreshNFTs } = useWallet();
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (walletAddress) {
-      try {
-        // Initialize connection to Solana devnet
-        const connection = new Connection('https://api.devnet.solana.com');
-        setTicketService(new SolanaTicketService(connection, null));
-      } catch (error) {
-        console.error("Error initializing Solana ticket service:", error);
-      }
-    }
-  }, [walletAddress]);
-
-  const mintTicket = async (
-    eventId: string,
-    seatInfo: string,
-    metadata: TicketNFTMetadata
-  ) => {
-    if (!ticketService || !walletAddress) {
-      toast({
-        title: "Error",
-        description: "Wallet not connected",
-        variant: "destructive"
-      });
-      return null;
+  const mintTicket = async (eventId: string, seatInfo: string, metadata: TicketNFTMetadata) => {
+    if (!connected || !publicKey || !wallet.signTransaction) {
+      throw new Error("Wallet not connected or cannot sign transactions");
     }
 
     setIsLoading(true);
     try {
-      if (!eventId || eventId.length < 32) {
-        throw new Error("Invalid event ID format");
-      }
-      
-      const eventPublicKey = new PublicKey(eventId);
-      const buyerPublicKey = new PublicKey(walletAddress);
-      const organizerPublicKey = new PublicKey("HndjAZBimoFvnTiKJoVn8dD73Uc4BMFmExrdMjKqWtbc");
-      
-      // Mock transaction delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const connection = new Connection("https://api.devnet.solana.com", "confirmed");
 
-      const signature = await ticketService.mintTicket(
-        eventPublicKey,
-        buyerPublicKey,
-        seatInfo,
-        metadata
+      // Just send SOL to organizer
+      const organizerPubKey = new PublicKey("HndjAZBimoFvnTiKJoVn8dD73Uc4BMFmExrdMjKqWtbc");
+      const lamports = metadata.properties.ticket_data?.original_price || 0;
+
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: organizerPubKey,
+          lamports,
+        })
       );
 
-      // Log the transaction
-      logTransaction(
-        'purchase',
-        metadata.properties.ticket_data?.original_price || 0,
-        `Purchased ticket for ${metadata.name}`
-      );
+      const signedTx = await wallet.signTransaction(tx);
+      const signature = await connection.sendRawTransaction(signedTx.serialize());
+      await connection.confirmTransaction(signature, "confirmed");
 
-      toast({
-        title: "Success",
-        description: `Ticket minted and ${metadata.properties.ticket_data?.original_price / LAMPORTS_PER_SOL} SOL transferred to organizer`
-      });
+      await refreshNFTs();
 
-      return {
-        signature,
-        ticketId: metadata.properties.ticket_data?.ticket_id || `ticket-${Date.now()}`,
-        metadata
-      };
-    } catch (error) {
-      console.error('Error minting ticket:', error);
-      toast({
-        title: "Error",
-        description: "Failed to mint ticket: " + (error instanceof Error ? error.message : "Unknown error"),
-        variant: "destructive"
-      });
-      return null;
+      logTransaction("purchase", lamports, `Ticket minted: ${metadata.name}`);
+
+      return { signature, mintAddress: null };
+    } catch (err) {
+      console.error(err);
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  return {
-    mintTicket,
-    isReady: !!ticketService && !isLoading,
-    isLoading
-  };
+  return { mintTicket, isReady: connected && !!wallet.signTransaction, isLoading };
 }

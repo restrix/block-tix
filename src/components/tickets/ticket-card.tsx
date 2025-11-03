@@ -1,16 +1,45 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { Event, Ticket } from "@/lib/mock-data";
 import { formatDate, formatPrice } from "@/lib/utils";
 import { Calendar, ExternalLink, MapPin, QrCode, Ticket as TicketIcon } from "lucide-react";
+import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react";
+import { useEffect, useState } from "react";
+import { PublicKey, Connection } from "@solana/web3.js";
+import { fetchNFTsForWallet } from "@/services/fetcher"; // create a helper service to fetch NFTs
 
 interface TicketCardProps {
-  ticket: Ticket;
-  event: Event;
+  ticket: {
+    seatNumber: string;
+    price: number;
+    currency: string;
+    mintAddress?: string; // NFT mint address
+    status: "minted" | "reserved" | "available";
+  };
+  event: {
+    title: string;
+    date: string;
+    location: string;
+    resaleEnabled: boolean;
+  };
 }
 
 export function TicketCard({ ticket, event }: TicketCardProps) {
+  const { publicKey, connected } = useSolanaWallet();
+  const [ownedNFTs, setOwnedNFTs] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!connected || !publicKey) return;
+
+    const connection = new Connection("https://api.devnet.solana.com", "confirmed");
+
+    fetchNFTsForWallet(connection, publicKey)
+      .then((mints) => setOwnedNFTs(mints))
+      .catch((err) => console.error("Error fetching NFTs:", err));
+  }, [publicKey, connected]);
+
+  const ownsNFT = ticket.mintAddress ? ownedNFTs.includes(ticket.mintAddress) : false;
+
   return (
     <Card className="overflow-hidden group hover:scale-105 transition-all duration-300 h-full flex flex-col bg-gradient-to-br from-orange-50 to-pink-50 dark:from-orange-900/20 dark:to-pink-900/20 hover:shadow-lg hover:shadow-orange-500/10">
       <CardHeader className="pb-2 relative">
@@ -34,8 +63,8 @@ export function TicketCard({ ticket, event }: TicketCardProps) {
             <TicketIcon className="h-4 w-4" />
             <span className="font-medium">Seat {ticket.seatNumber}</span>
           </div>
-          <Badge variant={ticket.status === 'minted' ? "outline" : "secondary"}>
-            {ticket.status === 'minted' ? 'NFT Minted' : ticket.status}
+          <Badge variant={ownsNFT ? "outline" : "secondary"}>
+            {ownsNFT ? "Owned" : ticket.status}
           </Badge>
         </div>
         <div className="text-sm text-muted-foreground">
@@ -44,18 +73,23 @@ export function TicketCard({ ticket, event }: TicketCardProps) {
         {ticket.mintAddress && (
           <div className="flex items-center text-xs text-muted-foreground space-x-2 overflow-hidden">
             <span className="truncate">NFT: {ticket.mintAddress}</span>
-            <a href="#" className="text-primary hover:underline">
+            <a
+              href={`https://explorer.solana.com/address/${ticket.mintAddress}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>
         )}
       </CardContent>
       <CardFooter className="border-t pt-4 flex justify-between">
-        <Button variant="outline">
+        <Button variant="outline" disabled={!connected}>
           <QrCode className="mr-2 h-4 w-4" />
           View Ticket
         </Button>
-        {event.resaleEnabled && ticket.status === 'minted' && (
+        {event.resaleEnabled && ownsNFT && (
           <Button variant="outline">
             List for Sale
           </Button>

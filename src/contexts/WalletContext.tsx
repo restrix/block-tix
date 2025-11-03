@@ -1,195 +1,105 @@
+"use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Keypair, Connection, LAMPORTS_PER_SOL, clusterApiUrl, PublicKey } from '@solana/web3.js';
+import React, { FC, ReactNode, useMemo, useEffect, createContext, useContext, useState } from "react";
+import {
+  ConnectionProvider,
+  WalletProvider,
+  useWallet as useSolanaWallet,
+} from "@solana/wallet-adapter-react";
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+import { clusterApiUrl, Connection, PublicKey } from "@solana/web3.js";
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  CoinbaseWalletAdapter,
+  TorusWalletAdapter,
+  LedgerWalletAdapter,
+} from "@solana/wallet-adapter-wallets";
 
-// Define the NFT type
-export interface NFT {
-  id: string;
-  name: string;
-  image: string;
-  event?: string;
-  date?: string;
-  seat?: string;
+// import "@solana/wallet-adapter-react-ui/styles.css";
+import { fetchNFTsForWallet } from "@/services/fetcher";
+
+interface WalletContextProps {
+  wallet: any;
+  publicKey: PublicKey | null;
+  connected: boolean;
+  nfts: any[];
+  refreshNFTs: () => Promise<void>;
 }
 
-// Define the WalletContextType
-export interface WalletContextType {
-  walletAddress: string | null;
-  isWalletCreated: boolean;
-  isOnboarded: boolean;
-  balance: number;
-  nfts: NFT[];
-  mnemonic: string | null;
-  keypair: Keypair | null;
-  createWallet: () => Promise<{ address: string }>;
-  completeOnboarding: () => void;
-  addFunds: (amount: number) => void;
-  addNFT: (nft: NFT) => void;
-  resetMnemonic: () => void;
-  refreshBalance: () => Promise<void>;
-  disconnectWallet: () => void;
-}
-
-// Create the context with default values
-const WalletContext = createContext<WalletContextType>({
-  walletAddress: null,
-  isWalletCreated: false,
-  isOnboarded: false,
-  balance: 0,
+const WalletContext = createContext<WalletContextProps>({
+  wallet: null,
+  publicKey: null,
+  connected: false,
   nfts: [],
-  mnemonic: null,
-  keypair: null,
-  createWallet: async () => ({ address: '' }),
-  completeOnboarding: () => {},
-  addFunds: () => {},
-  addNFT: () => {},
-  resetMnemonic: () => {},
-  refreshBalance: async () => {},
-  disconnectWallet: () => {}
+  refreshNFTs: async () => { },
 });
 
-// Provider component
-interface WalletProviderProps {
+interface WalletContextProviderProps {
   children: ReactNode;
 }
 
-export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [isWalletCreated, setIsWalletCreated] = useState(false);
-  const [isOnboarded, setIsOnboarded] = useState(false);
-  const [balance, setBalance] = useState(0);
-  const [nfts, setNfts] = useState<NFT[]>([]);
-  const [mnemonic, setMnemonic] = useState<string | null>(null);
-  const [keypair, setKeypair] = useState<Keypair | null>(null);
+const WalletContextProvider: FC<WalletContextProviderProps> = ({ children }) => {
+  const network = "devnet";
+  const endpoint = useMemo(() => clusterApiUrl(network), []);
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new CoinbaseWalletAdapter(),
+      new TorusWalletAdapter(),
+      new LedgerWalletAdapter(),
+    ],
+    []
+  );
 
-  // Initialize from localStorage on component mount
-  useEffect(() => {
-    const storedIsOnboarded = localStorage.getItem('isOnboarded') === 'true';
-    const storedNfts = JSON.parse(localStorage.getItem('walletNfts') || '[]');
+  const solanaWallet = useSolanaWallet();
+  const [nfts, setNFTs] = useState<any[]>([]);
 
-    if (storedIsOnboarded) setIsOnboarded(true);
-    setNfts(storedNfts);
-    
-    // Try to load keypair from localStorage
-    const savedKeypair = localStorage.getItem('solanaKeypair');
-    if (savedKeypair) {
-      try {
-        const secretKey = new Uint8Array(JSON.parse(savedKeypair));
-        const loadedKeypair = Keypair.fromSecretKey(secretKey);
-        setKeypair(loadedKeypair);
-        setWalletAddress(loadedKeypair.publicKey.toString());
-        setIsWalletCreated(true);
-        
-        // Fetch current balance
-        refreshBalanceFromChain(loadedKeypair.publicKey);
-      } catch (error) {
-        console.error("Error loading saved keypair:", error);
-      }
-    }
-  }, []);
-
-  // Refresh balance from Solana chain
-  const refreshBalanceFromChain = async (publicKey: PublicKey) => {
+  const refreshNFTs = async () => {
+    if (!solanaWallet.publicKey) return;
     try {
-      const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-      const balanceInLamports = await connection.getBalance(publicKey);
-      const solBalance = balanceInLamports / LAMPORTS_PER_SOL;
-      setBalance(solBalance);
-      return solBalance;
-    } catch (error) {
-      console.error("Error fetching balance:", error);
-      return 0;
+      const connection = new Connection(endpoint);
+      const walletNFTs = await fetchNFTsForWallet(
+        connection,
+        solanaWallet.publicKey, // make sure it's a string
+      );
+      setNFTs(walletNFTs);
+    } catch (err) {
+      console.error("Failed to fetch NFTs:", err);
+      setNFTs([]);
     }
   };
 
-  // Refresh balance function
-  const refreshBalance = async () => {
-    if (keypair) {
-      await refreshBalanceFromChain(keypair.publicKey);
+  useEffect(() => {
+    if (solanaWallet.connected) {
+      refreshNFTs();
+    } else {
+      setNFTs([]);
     }
-  };
-
-  // Create wallet function
-  const createWallet = async () => {
-    // Generate a real Solana keypair
-    const newKeypair = Keypair.generate();
-    const address = newKeypair.publicKey.toString();
-    
-    // Generate a mnemonic (in a real app, this would be generated properly)
-    setMnemonic("Please save this keypair securely. You won't be able to recover it if lost.");
-    setWalletAddress(address);
-    setIsWalletCreated(true);
-    setKeypair(newKeypair);
-    
-    // Save keypair to localStorage (in a real app, this would be encrypted)
-    localStorage.setItem('solanaKeypair', JSON.stringify(Array.from(newKeypair.secretKey)));
-    localStorage.setItem('walletAddress', address);
-    localStorage.setItem('isWalletCreated', 'true');
-    
-    // Get initial balance
-    await refreshBalanceFromChain(newKeypair.publicKey);
-    
-    return { address };
-  };
-
-  const resetMnemonic = () => {
-    setMnemonic(null);
-  };
-
-  // Complete onboarding function
-  const completeOnboarding = () => {
-    setIsOnboarded(true);
-    localStorage.setItem('isOnboarded', 'true');
-  };
-
-  // Add funds function
-  const addFunds = (amount: number) => {
-    const newBalance = balance + amount;
-    setBalance(newBalance);
-    localStorage.setItem('walletBalance', newBalance.toString());
-  };
-
-  // Add NFT function
-  const addNFT = (nft: NFT) => {
-    const newNfts = [...nfts, nft];
-    setNfts(newNfts);
-    localStorage.setItem('walletNfts', JSON.stringify(newNfts));
-  };
-
-  // Disconnect wallet function
-  const disconnectWallet = () => {
-    setKeypair(null);
-    setWalletAddress(null);
-    setIsWalletCreated(false);
-    setBalance(0);
-    localStorage.removeItem('solanaKeypair');
-    localStorage.removeItem('walletAddress');
-    localStorage.removeItem('isWalletCreated');
-  };
+  }, [solanaWallet.connected, solanaWallet.publicKey]);
 
   return (
-    <WalletContext.Provider
-      value={{
-        walletAddress,
-        isWalletCreated,
-        isOnboarded,
-        balance,
-        nfts,
-        mnemonic,
-        keypair,
-        createWallet,
-        completeOnboarding,
-        addFunds,
-        addNFT,
-        resetMnemonic,
-        refreshBalance,
-        disconnectWallet
-      }}
-    >
-      {children}
-    </WalletContext.Provider>
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          <WalletContext.Provider
+            value={{
+              wallet: solanaWallet,
+              publicKey: solanaWallet.publicKey,
+              connected: solanaWallet.connected,
+              nfts,
+              refreshNFTs,
+            }}
+          >
+            {children}
+          </WalletContext.Provider>
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 };
 
-// Hook for using the wallet context
 export const useWallet = () => useContext(WalletContext);
+
+export default WalletContextProvider;

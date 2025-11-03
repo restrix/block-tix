@@ -1,12 +1,23 @@
+"use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useWallet } from "@/contexts/WalletContext";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { Auction } from "@/lib/mock-data";
+import { Connection, clusterApiUrl } from "@solana/web3.js";
 
 interface PlaceBidProps {
   auction: Auction;
@@ -15,24 +26,55 @@ interface PlaceBidProps {
   currency?: string;
 }
 
-export function PlaceBid({ 
-  auction, 
-  currentHighestBid, 
+export function PlaceBid({
+  auction,
+  currentHighestBid,
   minBidIncrement = 0.01,
-  currency = "SOL"
+  currency = "SOL",
 }: PlaceBidProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [bidAmount, setBidAmount] = useState<number>(currentHighestBid + minBidIncrement);
+  const [bidAmount, setBidAmount] = useState<number>(
+    currentHighestBid + minBidIncrement
+  );
+  const [balance, setBalance] = useState<number>(0);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+
   const { toast } = useToast();
-  const { walletAddress, balance } = useWallet();
+  const { publicKey, connected } = useWallet();
+
+  // Create Solana connection (devnet for now)
+  const connection = new Connection(clusterApiUrl("devnet"));
+
+  // ✅ Fetch wallet balance when connected
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!connected || !publicKey) {
+        setBalance(0);
+        return;
+      }
+
+      try {
+        setLoadingBalance(true);
+        const lamports = await connection.getBalance(publicKey);
+        const solBalance = lamports / 1e9; // Convert lamports to SOL
+        setBalance(solBalance);
+      } catch (err) {
+        console.error("Error fetching balance:", err);
+      } finally {
+        setLoadingBalance(false);
+      }
+    };
+
+    fetchBalance();
+  }, [connected, publicKey]);
 
   const handlePlaceBid = async () => {
-    if (!walletAddress) {
+    if (!connected || !publicKey) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet first",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -41,7 +83,7 @@ export function PlaceBid({
       toast({
         title: "Bid too low",
         description: `Your bid must be higher than ${currentHighestBid} ${currency}`,
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -50,20 +92,19 @@ export function PlaceBid({
       toast({
         title: "Insufficient funds",
         description: `You need at least ${bidAmount} ${currency} to place this bid`,
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
     setIsLoading(true);
     try {
-      // In a real implementation, we would call the Solana program to place a bid
-      // For demo purposes, we'll simulate a successful bid
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // 🚀 Replace this mock with actual Solana program call later
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
       toast({
         title: "Bid placed successfully",
-        description: `You placed a bid of ${bidAmount} ${currency}`
+        description: `You placed a bid of ${bidAmount} ${currency}`,
       });
 
       setIsOpen(false);
@@ -72,7 +113,7 @@ export function PlaceBid({
       toast({
         title: "Error",
         description: "Failed to place bid",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -85,9 +126,9 @@ export function PlaceBid({
         <Button
           variant="default"
           className="w-full flex items-center justify-center space-x-2"
-          disabled={!walletAddress || auction.status !== 'active'}
+          disabled={!connected || auction.status !== "active"}
         >
-          {auction.status === 'active' ? (
+          {auction.status === "active" ? (
             <>
               <ArrowUp className="h-4 w-4" />
               <span>Place Bid</span>
@@ -97,6 +138,7 @@ export function PlaceBid({
           )}
         </Button>
       </DialogTrigger>
+
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Place a Bid</DialogTitle>
@@ -104,48 +146,74 @@ export function PlaceBid({
             Enter your bid amount for this ticket auction.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <label htmlFor="bidAmount" className="text-sm font-medium">
-              Bid Amount ({currency})
-            </label>
-            <Input
-              id="bidAmount"
-              type="number"
-              step="0.01"
-              min={currentHighestBid + minBidIncrement}
-              value={bidAmount}
-              onChange={(e) => setBidAmount(parseFloat(e.target.value))}
-            />
-            <p className="text-xs text-muted-foreground">
-              Minimum bid: {(currentHighestBid + minBidIncrement).toFixed(2)} {currency}
-            </p>
-          </div>
 
-          <div className="rounded-md bg-muted p-3">
-            <h4 className="font-medium mb-2">Bid Summary</h4>
-            <div className="space-y-1">
-              <div className="flex justify-between text-sm">
-                <span>Current Highest Bid:</span>
-                <span>{currentHighestBid.toFixed(2)} {currency}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Your Bid:</span>
-                <span>{bidAmount.toFixed(2)} {currency}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Your Balance:</span>
-                <span className={balance < bidAmount ? "text-destructive" : ""}>
-                  {balance.toFixed(2)} {currency}
-                </span>
-              </div>
+        <div className="space-y-4 py-2">
+          {!connected ? (
+            <div className="flex justify-center">
+              <WalletMultiButton />
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <label htmlFor="bidAmount" className="text-sm font-medium">
+                  Bid Amount ({currency})
+                </label>
+                <Input
+                  id="bidAmount"
+                  type="number"
+                  step="0.01"
+                  min={currentHighestBid + minBidIncrement}
+                  value={bidAmount}
+                  onChange={(e) => setBidAmount(parseFloat(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum bid:{" "}
+                  {(currentHighestBid + minBidIncrement).toFixed(2)} {currency}
+                </p>
+              </div>
+
+              <div className="rounded-md bg-muted p-3">
+                <h4 className="font-medium mb-2">Bid Summary</h4>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Current Highest Bid:</span>
+                    <span>
+                      {currentHighestBid.toFixed(2)} {currency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Your Bid:</span>
+                    <span>
+                      {bidAmount.toFixed(2)} {currency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Your Balance:</span>
+                    <span
+                      className={
+                        balance < bidAmount ? "text-destructive" : ""
+                      }
+                    >
+                      {loadingBalance
+                        ? "Loading..."
+                        : `${balance.toFixed(2)} ${currency}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
+
         <DialogFooter>
           <Button
             onClick={handlePlaceBid}
-            disabled={isLoading || bidAmount <= currentHighestBid || balance < bidAmount}
+            disabled={
+              isLoading ||
+              !connected ||
+              bidAmount <= currentHighestBid ||
+              balance < bidAmount
+            }
           >
             {isLoading ? (
               <>
