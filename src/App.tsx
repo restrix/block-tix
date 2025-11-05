@@ -12,7 +12,6 @@ import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import WalletContextProvider from "./contexts/WalletContext";
-import AdminDashboard from "./admin/page";
 
 const queryClient = new QueryClient();
 
@@ -27,7 +26,6 @@ const App = () => (
             <Route path="/" element={<Navigate to="/home" />} />
             <Route path="/home" element={<Index />} />
             <Route path="/events" element={<Events />} />
-            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/events/:id" element={<EventDetails />} />
             <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/dashboard" element={<Dashboard />} />

@@ -108,7 +108,7 @@ export function BuyTicket({ event, disabled = false }: BuyTicketProps) {
         symbol: "BLOCKTIX",
       });
 
-      console.log("✅ NFT minted:", nft.address.toBase58());
+      console.log("NFT minted:", nft.address.toBase58());
       toast({ title: "Success", description: "Ticket purchased and minted!" });
       setPurchaseComplete(true);
     } catch (err: any) {
