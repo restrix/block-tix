@@ -26,6 +26,7 @@ interface Movie {
   event_date: string;    // from "event_date"
   event_time: string;    // from "event_time"
   venue: string;         // from "venue"
+  organizer_wallet: string;  //  add this
 }
 
 
@@ -106,7 +107,7 @@ export default function EventDetails() {
   resaleEnabled: true,
   resalePriceCap: eventItem.price_sol, // you can adjust if you have a separate column
   location: eventItem.venue,
-  organizer: "Event Organizer", // keep static or fetch dynamically
+  organizer_wallet: eventItem.organizer_wallet,
 };
 
   const isSoldOut = event.availableTickets === 0;
@@ -225,7 +226,11 @@ export default function EventDetails() {
                       <span>{formatPrice(event.price * quantity)}</span>
                     </div>
 
-                    <BuyTicket event={{ ...event, price: event.price_sol }} disabled={isSoldOut} />
+                    <BuyTicket
+                      event={{ ...event, price: event.price_sol }}   // SOL price per ticket
+                      quantity={quantity}                             // pass quantity
+                      disabled={isSoldOut}
+                    />
                   </div>
                 </CardContent>
               </Card>
